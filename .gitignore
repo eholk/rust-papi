@@ -1,4 +1,5 @@
 .rust
+bin
 build
 lib
 *~
