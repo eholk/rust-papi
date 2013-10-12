@@ -4,5 +4,8 @@ before_install:
 install:
   - sudo apt-get install rust-nightly
   - ./.travis/install-papi.sh
+
+env:
+  - RUST_THREADS=1
 script:
-  - RUST_THREADS=1 rustpkg test papi
+  - rustpkg test papi
