@@ -5,5 +5,4 @@ install:
   - sudo apt-get install rust-nightly
   - ./.travis/install-papi.sh
 script:
-  - make -C src
-  - ./src/benchmark
+  - rustpkg test papi
