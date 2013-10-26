@@ -8,7 +8,7 @@ extern {
     fn PAPI_num_counters() -> libc::c_int;
     fn PAPI_start_counters(events: *libc::c_int, len: libc::c_int)
         -> libc::c_int;
-    fn PAPI_stop_counters(events: *libc::c_int, len: libc::c_int)
+    fn PAPI_stop_counters(events: *libc::c_longlong, len: libc::c_int)
         -> libc::c_int;
     fn PAPI_read_counters(values: *libc::c_longlong, len: libc::c_int)
         -> libc::c_int;
@@ -23,19 +23,21 @@ fn check_status(status: libc::c_int) {
 }
 
 #[fixed_stack_segment]
+#[inline(never)]
 pub fn is_initialized() -> bool {
     let result = unsafe { PAPI_is_initialized() };
     result != 0
 }
 
 #[fixed_stack_segment]
+#[inline(never)]
 pub fn num_counters() -> int {
     unsafe { PAPI_num_counters() as int }
 }
 
 #[fixed_stack_segment]
-pub fn start_counters(events: &[Counter]) {
-    let events = events.map(|&e| e as libc::c_int);
+#[inline(never)]
+fn start_counters(events: &[libc::c_int]) {
     let status = unsafe {
         PAPI_start_counters(vec::raw::to_ptr(events),
                             events.len() as libc::c_int)
@@ -44,17 +46,18 @@ pub fn start_counters(events: &[Counter]) {
 }
 
 #[fixed_stack_segment]
-pub fn stop_counters(events: &[Counter]) {
-    let events = events.map(|&e| e as libc::c_int);
+#[inline(never)]
+fn stop_counters(values: &[libc::c_longlong]) {
     let status = unsafe {
-        PAPI_stop_counters(vec::raw::to_ptr(events),
-                           events.len() as libc::c_int)
+        PAPI_stop_counters(vec::raw::to_ptr(values),
+                           values.len() as libc::c_int)
     };
     check_status(status);
 }
 
 #[fixed_stack_segment]
-pub fn read_counters(values: &[libc::c_longlong]) {
+#[inline(never)]
+fn read_counters(values: &mut [libc::c_longlong]) {
     let status = unsafe {
         PAPI_read_counters(cast::transmute(vec::raw::to_ptr(values)),
                            values.len() as libc::c_int)
@@ -63,7 +66,8 @@ pub fn read_counters(values: &[libc::c_longlong]) {
 }
 
 #[fixed_stack_segment]
-pub fn accum_counters(values: &[libc::c_longlong]) {
+#[inline(never)]
+fn accum_counters(values: &mut [libc::c_longlong]) {
     let status = unsafe {
         PAPI_accum_counters(cast::transmute(vec::raw::to_ptr(values)),
                             values.len() as libc::c_int)
@@ -73,24 +77,27 @@ pub fn accum_counters(values: &[libc::c_longlong]) {
 
 pub struct CounterSet {
     counters: ~[Counter],
+    priv raw_counters: ~[libc::c_int],
     priv values: ~[libc::c_longlong],
 }
 
 impl CounterSet {
     pub fn new(counters: &[Counter]) -> CounterSet {
-        start_counters(counters);
+        let raw_counters = counters.map(|&x| x as libc::c_int);
+        start_counters(raw_counters);
         CounterSet {
             counters: counters.map(|&x| x),
+            raw_counters: raw_counters,
             values: counters.map(|_| 0)
         }
     }
 
-    pub fn read(&self) -> ~[i64] {
+    pub fn read(&mut self) -> ~[i64] {
         read_counters(self.values);
         self.values.map(|&x| x as i64)
     }
 
-    pub fn accum(&self) -> ~[i64] {
+    pub fn accum(&mut self) -> ~[i64] {
         accum_counters(self.values);
         self.values.map(|&x| x as i64)
     }
@@ -98,7 +105,7 @@ impl CounterSet {
 
 impl Drop for CounterSet {
     fn drop(&mut self) {
-        stop_counters(self.counters);
+        stop_counters(self.values);
     }
 }
 
