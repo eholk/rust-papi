@@ -1,7 +1,7 @@
 extern mod papi;
 
 fn main() {
-    let counters = papi::CounterSet::new([papi::PAPI_TOT_INS]);
+    let mut counters = papi::CounterSet::new([papi::PAPI_TOT_INS]);
 
     let start = counters.read();
     let x = fib(14);
