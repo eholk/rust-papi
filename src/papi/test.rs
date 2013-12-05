@@ -7,16 +7,16 @@ fn fib(n: int) -> int {
 
 #[test]
 fn is_initialized() {
-    do papi::counters_in_use::cond.trap(|_| papi::Retry).inside {
+    papi::counters_in_use::cond.trap(|_| papi::Retry).inside(|| {
         papi::is_initialized();
-    }
+    })
 }
 
 #[test]
 fn num_counters() {
-    do papi::counters_in_use::cond.trap(|_| papi::Retry).inside {
+    papi::counters_in_use::cond.trap(|_| papi::Retry).inside(|| {
         papi::num_counters();
-    }
+    })
 }
 
 #[test]

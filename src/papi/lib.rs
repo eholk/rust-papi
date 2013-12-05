@@ -4,7 +4,7 @@ use std::vec;
 use std::unstable::atomics;
 use std::rand::Rng;
 
-#[link_args = "-lpapi"]
+#[link(name="papi")]
 extern {
     fn PAPI_is_initialized() -> libc::c_int;
     fn PAPI_num_counters() -> libc::c_int;
@@ -24,23 +24,17 @@ fn check_status(status: libc::c_int) {
     }
 }
 
-#[fixed_stack_segment]
-#[inline(never)]
 pub fn is_initialized() -> bool {
     let _lock = CounterLock::new();
     let result = unsafe { PAPI_is_initialized() };
     result != 0
 }
 
-#[fixed_stack_segment]
-#[inline(never)]
 pub fn num_counters() -> int {
     let _lock = CounterLock::new();
     unsafe { PAPI_num_counters() as int }
 }
 
-#[fixed_stack_segment]
-#[inline(never)]
 fn start_counters(events: &[libc::c_int]) {
     let status = unsafe {
         PAPI_start_counters(vec::raw::to_ptr(events),
@@ -49,8 +43,6 @@ fn start_counters(events: &[libc::c_int]) {
     check_status(status);
 }
 
-#[fixed_stack_segment]
-#[inline(never)]
 fn stop_counters(values: &[libc::c_longlong]) {
     let status = unsafe {
         PAPI_stop_counters(vec::raw::to_ptr(values),
@@ -59,8 +51,6 @@ fn stop_counters(values: &[libc::c_longlong]) {
     check_status(status);
 }
 
-#[fixed_stack_segment]
-#[inline(never)]
 fn read_counters(values: &mut [libc::c_longlong]) {
     let status = unsafe {
         PAPI_read_counters(cast::transmute(vec::raw::to_ptr(values)),
@@ -69,8 +59,6 @@ fn read_counters(values: &mut [libc::c_longlong]) {
     check_status(status);
 }
 
-#[fixed_stack_segment]
-#[inline(never)]
 fn accum_counters(values: &mut [libc::c_longlong]) {
     let status = unsafe {
         PAPI_accum_counters(cast::transmute(vec::raw::to_ptr(values)),
@@ -96,14 +84,14 @@ impl CounterLock {
         let mut rng = std::rand::weak_rng();
         let mut timer = std::io::timer::Timer::new()
             .expect("CounterLock::new_wait could not create timer");
-        do counters_in_use::cond.trap(|_| {
+        counters_in_use::cond.trap(|_| {
                 let delay = rng.gen_range(0u64, retry_count);
                 retry_count = retry_count * 2;
                 timer.sleep(delay);
                 Retry
-            }).inside {
+            }).inside(|| {
             CounterLock::new()
-        }        
+        })        
     }
 }
 
@@ -147,14 +135,14 @@ impl CounterSet {
         let mut rng = std::rand::weak_rng();
         let mut timer = std::io::timer::Timer::new()
             .expect("CounterSet::new_wait could not create timer");
-        do counters_in_use::cond.trap(|_| {
+        counters_in_use::cond.trap(|_| {
                 let delay = rng.gen_range(0u64, retry_count);
                 retry_count = retry_count * 2;
                 timer.sleep(delay);
                 Retry
-            }).inside {
-            CounterSet::new(counters)
-        }
+            }).inside(|| {
+                CounterSet::new(counters)
+            })
     }
 
     pub fn read(&mut self) -> ~[i64] {
