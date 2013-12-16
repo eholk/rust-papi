@@ -37,7 +37,7 @@ pub fn num_counters() -> int {
 
 fn start_counters(events: &[libc::c_int]) {
     let status = unsafe {
-        PAPI_start_counters(vec::raw::to_ptr(events),
+        PAPI_start_counters(events.as_ptr(),
                             events.len() as libc::c_int)
     };
     check_status(status);
@@ -45,7 +45,7 @@ fn start_counters(events: &[libc::c_int]) {
 
 fn stop_counters(values: &[libc::c_longlong]) {
     let status = unsafe {
-        PAPI_stop_counters(vec::raw::to_ptr(values),
+        PAPI_stop_counters(values.as_ptr(),
                            values.len() as libc::c_int)
     };
     check_status(status);
@@ -53,7 +53,7 @@ fn stop_counters(values: &[libc::c_longlong]) {
 
 fn read_counters(values: &mut [libc::c_longlong]) {
     let status = unsafe {
-        PAPI_read_counters(cast::transmute(vec::raw::to_ptr(values)),
+        PAPI_read_counters(cast::transmute(values.as_ptr()),
                            values.len() as libc::c_int)
     };
     check_status(status);
@@ -61,7 +61,7 @@ fn read_counters(values: &mut [libc::c_longlong]) {
 
 fn accum_counters(values: &mut [libc::c_longlong]) {
     let status = unsafe {
-        PAPI_accum_counters(cast::transmute(vec::raw::to_ptr(values)),
+        PAPI_accum_counters(cast::transmute(values.as_ptr()),
                             values.len() as libc::c_int)
     };
     check_status(status);
