@@ -1,3 +1,8 @@
+#[pkgid="papi"];
+
+//! This package provides bindings to the PAPI performance counters
+//! library.
+
 use std::cast;
 use std::libc;
 use std::vec;
