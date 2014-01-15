@@ -1,13 +1,15 @@
-#[pkgid="papi"];
+#[crate_id="papi"];
 
 //! This package provides bindings to the PAPI performance counters
 //! library.
 
 use std::cast;
 use std::libc;
-use std::vec;
-use std::unstable::atomics;
+use std::sync::atomics;
 use std::rand::Rng;
+
+#[link(name="stdc++")]
+extern {}
 
 #[link(name="papi")]
 extern {
