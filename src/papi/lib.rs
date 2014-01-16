@@ -1,4 +1,4 @@
-#[crate_id="papi"];
+#[crate_id="papi#0.2"];
 
 //! This package provides bindings to the PAPI performance counters
 //! library.

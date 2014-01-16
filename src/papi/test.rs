@@ -1,4 +1,4 @@
-extern mod papi;
+extern mod papi = "papi#0.2";
 
 fn fib(n: int) -> int {
     if n < 2 { 1 }
