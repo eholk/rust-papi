@@ -1,4 +1,4 @@
-extern mod papi;
+extern mod papi = "papi#0.2";
 
 fn main() {
     let mut counters = papi::CounterSet::new([papi::PAPI_TOT_INS]);

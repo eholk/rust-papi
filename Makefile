@@ -1,4 +1,4 @@
-.phony: all docs check
+.phony: all docs check clean
 
 all: docs
 	rustpkg build papi
@@ -8,3 +8,6 @@ check:
 
 docs:
 	rustdoc src/papi/lib.rs
+
+clean:
+	rustpkg clean papi
