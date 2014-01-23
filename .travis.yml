@@ -8,3 +8,11 @@ install:
 script:
   - rustpkg build papi
   - rustpkg test papi
+  - make docs
+
+env:
+  global:
+    - secure: fMUh4cmJhaBECm0BZV8MJy17Vk3qvotjKRgq7HN+5hQi6vSLHJK5yQOPIsZuZGkksGObhLRQ/ImdH6xvxppdEPwz/O75bEruTKPdD6V8JphljRKAgsHN6LOtKFcq1IqKVFJ9RV/st7FuC55FWyS4Vbgrdamoqg/bq1wctwcOmsQ=
+
+after_script:
+  - curl http://www.rust-ci.org/artifacts/put?t=$RUSTCI_TOKEN | sh
