@@ -6,8 +6,7 @@ install:
   - ./.travis/install-papi.sh
 
 script:
-  - rustpkg build papi
-  - rustpkg test papi
+  - make check
   - make docs
 
 env:
