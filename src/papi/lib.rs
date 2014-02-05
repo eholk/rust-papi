@@ -1,4 +1,5 @@
 #[crate_id="papi#0.2"];
+#[crate_type="lib"];
 
 //! This package provides bindings to the PAPI performance counters
 //! library.
@@ -89,8 +90,7 @@ impl CounterLock {
     fn new_wait() -> CounterLock {
         let mut retry_count = 1;
         let mut rng = std::rand::weak_rng();
-        let mut timer = std::io::timer::Timer::new()
-            .expect("CounterLock::new_wait could not create timer");
+        let mut timer = std::io::timer::Timer::new().unwrap();
         counters_in_use::cond.trap(|_| {
                 let delay = rng.gen_range(0u64, retry_count);
                 retry_count = retry_count * 2;
@@ -140,8 +140,7 @@ impl CounterSet {
     pub fn new_wait(counters: &[Counter]) -> CounterSet {
         let mut retry_count = 1;
         let mut rng = std::rand::weak_rng();
-        let mut timer = std::io::timer::Timer::new()
-            .expect("CounterSet::new_wait could not create timer");
+        let mut timer = std::io::timer::Timer::new().unwrap();
         counters_in_use::cond.trap(|_| {
                 let delay = rng.gen_range(0u64, retry_count);
                 retry_count = retry_count * 2;
