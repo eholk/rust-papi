@@ -1,4 +1,4 @@
-extern crate papi = "papi#0.2";
+extern crate papi = "papi#0.3pre";
 
 fn fib(n: int) -> int {
     if n < 2 { 1 }
