@@ -1,4 +1,4 @@
-extern mod papi = "papi#0.2";
+extern crate papi = "papi#0.2";
 
 fn fib(n: int) -> int {
     if n < 2 { 1 }
@@ -7,24 +7,22 @@ fn fib(n: int) -> int {
 
 #[test]
 fn is_initialized() {
-    papi::counters_in_use::cond.trap(|_| papi::Retry).inside(|| {
-        papi::is_initialized();
-    })
+    unsafe { papi::is_initialized() };
 }
 
 #[test]
 fn num_counters() {
-    papi::counters_in_use::cond.trap(|_| papi::Retry).inside(|| {
-        papi::num_counters();
-    })
+    unsafe { papi::num_counters() };
 }
 
 #[test]
 fn counter_set() {
-    let mut counters = papi::CounterSet::new_wait([papi::PAPI_TOT_INS,
-                                                   papi::PAPI_TOT_CYC]);
+    unsafe {
+        let mut counters = papi::CounterSet::new([papi::PAPI_TOT_INS,
+                                                  papi::PAPI_TOT_CYC]);
     
-    let _start = counters.read();
-    let _x = fib(14);
-    let _stop = counters.accum();
+        let _start = counters.read();
+        let _x = fib(14);
+        let _stop = counters.accum();
+    }
 }

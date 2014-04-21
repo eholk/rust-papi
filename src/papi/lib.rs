@@ -1,13 +1,17 @@
-#[crate_id="papi#0.2"];
-#[crate_type="lib"];
+#![crate_id="papi#0.2"]
+#![crate_type="lib"]
 
 //! This package provides bindings to the PAPI performance counters
 //! library.
 
+extern crate rand;
+extern crate sync;
+
+use rand::Rng;
 use std::cast;
 use std::libc;
 use std::sync::atomics;
-use std::rand::Rng;
+use sync::mutex::{Guard, StaticMutex, MUTEX_INIT};
 
 #[link(name="stdc++")]
 extern {}
@@ -32,13 +36,13 @@ fn check_status(status: libc::c_int) {
     }
 }
 
-pub fn is_initialized() -> bool {
+pub unsafe fn is_initialized() -> bool {
     let _lock = CounterLock::new();
     let result = unsafe { PAPI_is_initialized() };
     result != 0
 }
 
-pub fn num_counters() -> int {
+pub unsafe fn num_counters() -> int {
     let _lock = CounterLock::new();
     unsafe { PAPI_num_counters() as int }
 }
@@ -75,36 +79,13 @@ fn accum_counters(values: &mut [libc::c_longlong]) {
     check_status(status);
 }
 
-static mut COUNTER_LOCK : atomics::AtomicFlag = atomics::INIT_ATOMIC_FLAG;
+static mut COUNTER_LOCK : StaticMutex = MUTEX_INIT;
 
-struct CounterLock;
+struct CounterLock(Guard<'static>);
 
 impl CounterLock {
-    fn new() -> CounterLock {
-        while(unsafe { COUNTER_LOCK.test_and_set(atomics::Acquire) }
-              && counters_in_use::cond.raise(()) == Retry)
-            {}
-        CounterLock
-    }
-    
-    fn new_wait() -> CounterLock {
-        let mut retry_count = 1;
-        let mut rng = std::rand::weak_rng();
-        let mut timer = std::io::timer::Timer::new().unwrap();
-        counters_in_use::cond.trap(|_| {
-                let delay = rng.gen_range(0u64, retry_count);
-                retry_count = retry_count * 2;
-                timer.sleep(delay);
-                Retry
-            }).inside(|| {
-            CounterLock::new()
-        })        
-    }
-}
-
-impl Drop for CounterLock {
-    fn drop(&mut self) {
-        unsafe { COUNTER_LOCK.clear(atomics::Release); }        
+    unsafe fn new() -> CounterLock {
+        CounterLock(COUNTER_LOCK.lock())
     }
 }
 
@@ -113,62 +94,47 @@ impl Drop for CounterLock {
 #[deriving(Eq)]
 pub enum Action { Retry }
 
-condition! {
-    pub counters_in_use : () -> Action;
-}
-
 pub struct CounterSet {
-    counters: ~[Counter],
-    priv raw_counters: ~[libc::c_int],
-    priv values: ~[libc::c_longlong],
+    counters: Vec<Counter>,
+    priv raw_counters: Vec<libc::c_int>,
+    priv values: Vec<libc::c_longlong>,
     priv lock: CounterLock
 }
 
 impl CounterSet {
-    pub fn new(counters: &[Counter]) -> CounterSet {
+    pub unsafe fn new(counters: &[Counter]) -> CounterSet {
         let lock = CounterLock::new();
-        let raw_counters = counters.map(|&x| x as libc::c_int);
-        start_counters(raw_counters);
+        let raw_counters
+            = counters.iter().map(|&x| x as libc::c_int)
+            .collect::<Vec<i32>>();
+        start_counters(raw_counters.as_slice());
         CounterSet {
-            counters: counters.map(|&x| x),
+            counters: Vec::from_slice(counters),
             raw_counters: raw_counters,
-            values: counters.map(|_| 0),
+            values: Vec::from_elem(counters.len(), 0i64),
             lock: lock
         }
     }
 
-    pub fn new_wait(counters: &[Counter]) -> CounterSet {
-        let mut retry_count = 1;
-        let mut rng = std::rand::weak_rng();
-        let mut timer = std::io::timer::Timer::new().unwrap();
-        counters_in_use::cond.trap(|_| {
-                let delay = rng.gen_range(0u64, retry_count);
-                retry_count = retry_count * 2;
-                timer.sleep(delay);
-                Retry
-            }).inside(|| {
-                CounterSet::new(counters)
-            })
+    pub fn read(&mut self) -> Vec<i64> {
+        read_counters(self.values.as_mut_slice());
+        self.values.clone()
     }
 
-    pub fn read(&mut self) -> ~[i64] {
-        read_counters(self.values);
-        self.values.map(|&x| x as i64)
-    }
-
-    pub fn accum(&mut self) -> ~[i64] {
-        accum_counters(self.values);
-        self.values.map(|&x| x as i64)
+    pub fn accum(&mut self) -> Vec<i64> {
+        accum_counters(self.values.as_mut_slice());
+        self.values.clone()
     }
 }
 
 impl Drop for CounterSet {
     fn drop(&mut self) {
-        stop_counters(self.values);
+        stop_counters(self.values.as_mut_slice());
     }
 }
 
 // adapted from papiStdEventDefs.h
+#[deriving(Clone)]
 pub enum Counter
 {
 	PAPI_L1_DCM = 0x80000000,  /*Level 1 data cache misses */
