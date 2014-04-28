@@ -4,12 +4,12 @@
 //! This package provides bindings to the PAPI performance counters
 //! library.
 
+extern crate libc;
 extern crate rand;
 extern crate sync;
 
 use rand::Rng;
 use std::cast;
-use std::libc;
 use std::sync::atomics;
 use sync::mutex::{Guard, StaticMutex, MUTEX_INIT};
 
@@ -96,9 +96,9 @@ pub enum Action { Retry }
 
 pub struct CounterSet {
     counters: Vec<Counter>,
-    priv raw_counters: Vec<libc::c_int>,
-    priv values: Vec<libc::c_longlong>,
-    priv lock: CounterLock
+    raw_counters: Vec<libc::c_int>,
+    values: Vec<libc::c_longlong>,
+    lock: CounterLock
 }
 
 impl CounterSet {
