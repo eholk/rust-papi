@@ -13,9 +13,6 @@ use std::libc;
 use std::sync::atomics;
 use sync::mutex::{Guard, StaticMutex, MUTEX_INIT};
 
-#[link(name="stdc++")]
-extern {}
-
 #[link(name="papi")]
 extern {
     fn PAPI_is_initialized() -> libc::c_int;
