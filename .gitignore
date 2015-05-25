@@ -4,3 +4,5 @@ build
 lib
 *~
 doc
+target
+Cargo.lock

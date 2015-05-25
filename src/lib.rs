@@ -1,17 +1,14 @@
-#![crate_id="papi#0.3pre"]
-#![crate_type="lib"]
-
 //! This package provides bindings to the PAPI performance counters
 //! library.
 
+#![feature(std_misc)]
+#![allow(non_camel_case_types)]
+
 extern crate libc;
 extern crate rand;
-extern crate sync;
 
-use rand::Rng;
-use std::cast;
-use std::sync::atomics;
-use sync::mutex::{Guard, StaticMutex, MUTEX_INIT};
+use std::mem;
+use std::sync::{MutexGuard, StaticMutex, MUTEX_INIT};
 
 #[link(name="stdc++")]
 extern {}
@@ -20,31 +17,31 @@ extern {}
 extern {
     fn PAPI_is_initialized() -> libc::c_int;
     fn PAPI_num_counters() -> libc::c_int;
-    fn PAPI_start_counters(events: *libc::c_int, len: libc::c_int)
+    fn PAPI_start_counters(events: *const libc::c_int, len: libc::c_int)
         -> libc::c_int;
-    fn PAPI_stop_counters(events: *libc::c_longlong, len: libc::c_int)
+    fn PAPI_stop_counters(events: *const libc::c_longlong, len: libc::c_int)
         -> libc::c_int;
-    fn PAPI_read_counters(values: *libc::c_longlong, len: libc::c_int)
+    fn PAPI_read_counters(values: *mut libc::c_longlong, len: libc::c_int)
         -> libc::c_int;
-    fn PAPI_accum_counters(values: *libc::c_longlong, len: libc::c_int)
+    fn PAPI_accum_counters(values: *mut libc::c_longlong, len: libc::c_int)
         -> libc::c_int;
 }
 
 fn check_status(status: libc::c_int) {
     if status != PAPI_OK {
-        fail!(status.to_str())
+        panic!("{}", status)
     }
 }
 
 pub unsafe fn is_initialized() -> bool {
     let _lock = CounterLock::new();
-    let result = unsafe { PAPI_is_initialized() };
+    let result = PAPI_is_initialized();
     result != 0
 }
 
-pub unsafe fn num_counters() -> int {
+pub unsafe fn num_counters() -> isize {
     let _lock = CounterLock::new();
-    unsafe { PAPI_num_counters() as int }
+    PAPI_num_counters() as isize
 }
 
 fn start_counters(events: &[libc::c_int]) {
@@ -65,7 +62,7 @@ fn stop_counters(values: &[libc::c_longlong]) {
 
 fn read_counters(values: &mut [libc::c_longlong]) {
     let status = unsafe {
-        PAPI_read_counters(cast::transmute(values.as_ptr()),
+        PAPI_read_counters(mem::transmute(values.as_ptr()),
                            values.len() as libc::c_int)
     };
     check_status(status);
@@ -73,7 +70,7 @@ fn read_counters(values: &mut [libc::c_longlong]) {
 
 fn accum_counters(values: &mut [libc::c_longlong]) {
     let status = unsafe {
-        PAPI_accum_counters(cast::transmute(values.as_ptr()),
+        PAPI_accum_counters(mem::transmute(values.as_ptr()),
                             values.len() as libc::c_int)
     };
     check_status(status);
@@ -81,60 +78,61 @@ fn accum_counters(values: &mut [libc::c_longlong]) {
 
 static mut COUNTER_LOCK : StaticMutex = MUTEX_INIT;
 
-struct CounterLock(Guard<'static>);
+struct CounterLock<'a>(MutexGuard<'a, ()>);
 
-impl CounterLock {
-    unsafe fn new() -> CounterLock {
-        CounterLock(COUNTER_LOCK.lock())
+impl<'a> CounterLock<'a> {
+    unsafe fn new() -> CounterLock<'a> {
+        CounterLock(COUNTER_LOCK.lock().unwrap())
     }
 }
 
 // The only reasonable action for counters_in_use is to
 // retry. Otherwise, you might as well just fail yourself.
-#[deriving(Eq)]
+#[derive(PartialEq,Eq)]
 pub enum Action { Retry }
 
-pub struct CounterSet {
+pub struct CounterSet<'a> {
     counters: Vec<Counter>,
     raw_counters: Vec<libc::c_int>,
     values: Vec<libc::c_longlong>,
-    lock: CounterLock
+    lock: CounterLock<'a>
 }
 
-impl CounterSet {
+impl<'a> CounterSet<'a> {
     pub unsafe fn new(counters: &[Counter]) -> CounterSet {
         let lock = CounterLock::new();
         let raw_counters
-            = counters.iter().map(|&x| x as libc::c_int)
+            = counters.iter().map(|x| (*x).clone() as libc::c_int)
             .collect::<Vec<i32>>();
-        start_counters(raw_counters.as_slice());
+        let values = counters.iter().map(|_| 0i64).collect();
+        start_counters(&raw_counters[..]);
         CounterSet {
-            counters: Vec::from_slice(counters),
+            counters: Vec::from(counters),
             raw_counters: raw_counters,
-            values: Vec::from_elem(counters.len(), 0i64),
+            values: values,
             lock: lock
         }
     }
 
     pub fn read(&mut self) -> Vec<i64> {
-        read_counters(self.values.as_mut_slice());
+        read_counters(&mut self.values[..]);
         self.values.clone()
     }
 
     pub fn accum(&mut self) -> Vec<i64> {
-        accum_counters(self.values.as_mut_slice());
+        accum_counters(&mut self.values[..]);
         self.values.clone()
     }
 }
 
-impl Drop for CounterSet {
+impl<'a> Drop for CounterSet<'a> {
     fn drop(&mut self) {
-        stop_counters(self.values.as_mut_slice());
+        stop_counters(&mut self.values[..]);
     }
 }
 
 // adapted from papiStdEventDefs.h
-#[deriving(Clone)]
+#[derive(Clone)]
 pub enum Counter
 {
 	PAPI_L1_DCM = 0x80000000,  /*Level 1 data cache misses */
@@ -257,56 +255,56 @@ pub enum Counter
 // Return codes
 // adapted from papi.h
 /** No error */
-static PAPI_OK        : libc::c_int =  0  ;   
+pub static PAPI_OK        : libc::c_int =  0  ;   
 /** Invalid argument */
-static PAPI_EINVAL    : libc::c_int = -1  ;   
+pub static PAPI_EINVAL    : libc::c_int = -1  ;   
 /** Insufficient memory */
-static PAPI_ENOMEM    : libc::c_int = -2  ;   
+pub static PAPI_ENOMEM    : libc::c_int = -2  ;   
 /** A System/C library call failed */
-static PAPI_ESYS      : libc::c_int = -3  ;   
+pub static PAPI_ESYS      : libc::c_int = -3  ;   
 /** Not supported by component */
-static PAPI_ECMP      : libc::c_int = -4  ;   
+pub static PAPI_ECMP      : libc::c_int = -4  ;   
 /** Backwards compatibility */
-static PAPI_ESBSTR    : libc::c_int = -4  ;   
+pub static PAPI_ESBSTR    : libc::c_int = -4  ;   
 /** Access to the counters was lost or interrupted */
-static PAPI_ECLOST    : libc::c_int = -5  ;   
+pub static PAPI_ECLOST    : libc::c_int = -5  ;   
 /** Internal error, please send mail to the developers */
-static PAPI_EBUG      : libc::c_int = -6  ;   
+pub static PAPI_EBUG      : libc::c_int = -6  ;   
 /** Event does not exist */
-static PAPI_ENOEVNT   : libc::c_int = -7  ;   
+pub static PAPI_ENOEVNT   : libc::c_int = -7  ;   
 /** Event exists, but cannot be counted due to counter resource limitations */
-static PAPI_ECNFLCT   : libc::c_int = -8  ;   
+pub static PAPI_ECNFLCT   : libc::c_int = -8  ;   
 /** EventSet is currently not running */
-static PAPI_ENOTRUN   : libc::c_int = -9  ;   
+pub static PAPI_ENOTRUN   : libc::c_int = -9  ;   
 /** EventSet is currently counting */
-static PAPI_EISRUN    : libc::c_int = -10 ;   
+pub static PAPI_EISRUN    : libc::c_int = -10 ;   
 /** No such EventSet Available */
-static PAPI_ENOEVST   : libc::c_int = -11 ;   
+pub static PAPI_ENOEVST   : libc::c_int = -11 ;   
 /** Event in argument is not a valid preset */
-static PAPI_ENOTPRESET: libc::c_int = -12 ;   
+pub static PAPI_ENOTPRESET: libc::c_int = -12 ;   
 /** Hardware does not support performance counters */
-static PAPI_ENOCNTR   : libc::c_int = -13 ;   
+pub static PAPI_ENOCNTR   : libc::c_int = -13 ;   
 /** Unknown error code */
-static PAPI_EMISC     : libc::c_int = -14 ;   
+pub static PAPI_EMISC     : libc::c_int = -14 ;   
 /** Permission level does not permit operation */
-static PAPI_EPERM     : libc::c_int = -15 ;   
+pub static PAPI_EPERM     : libc::c_int = -15 ;   
 /** PAPI hasn't been initialized yet */
-static PAPI_ENOINIT   : libc::c_int = -16 ;   
+pub static PAPI_ENOINIT   : libc::c_int = -16 ;   
 /** Component Index isn't set */
-static PAPI_ENOCMP    : libc::c_int = -17 ;   
+pub static PAPI_ENOCMP    : libc::c_int = -17 ;   
 /** Not supported */
-static PAPI_ENOSUPP   : libc::c_int = -18 ;   
+pub static PAPI_ENOSUPP   : libc::c_int = -18 ;   
 /** Not implemented */
-static PAPI_ENOIMPL   : libc::c_int = -19 ;   
+pub static PAPI_ENOIMPL   : libc::c_int = -19 ;   
 /** Buffer size exceeded */
-static PAPI_EBUF      : libc::c_int = -20 ;   
+pub static PAPI_EBUF      : libc::c_int = -20 ;   
 /** EventSet domain is not supported for the operation */
-static PAPI_EINVAL_DOM: libc::c_int = -21 ;   
+pub static PAPI_EINVAL_DOM: libc::c_int = -21 ;   
 /** Invalid or missing event attributes */
-static PAPI_EATTR	  : libc::c_int =  -22;    
+pub static PAPI_EATTR	  : libc::c_int =  -22;    
 /** Too many events or attributes */
-static PAPI_ECOUNT	  : libc::c_int =  -23;    
+pub static PAPI_ECOUNT	  : libc::c_int =  -23;    
 /** Bad combination of features */
-static PAPI_ECOMBO	  : libc::c_int =  -24;    
+pub static PAPI_ECOMBO	  : libc::c_int =  -24;    
 /** Number of error messages specified in this API */
-static PAPI_NUM_ERRORS: libc::c_int =   25;    
+pub static PAPI_NUM_ERRORS: libc::c_int =   25;    
